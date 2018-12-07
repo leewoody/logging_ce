@@ -15,6 +15,7 @@
 #include <stdio.h>
 
 //LPCRITICAL_SECTION pCriticalAction;
+#define APP_CFG_AP_FOLDER_ROOT "\\My Flash Disk\\"
 
 #ifdef USEWINSOCK
 static SOCKET wsa_socket=INVALID_SOCKET;
@@ -160,11 +161,11 @@ static int initFileNames()
 	CloseHandle(hFile);
 
 	if(dwFileSize != 0xFFFFFFFF){ //no error
-		if(dwFileSize>0x100000){ //more than 1MB?
+		if(dwFileSize>0xF00000){ //more than 15MB?
 			//make a backup
 			//delete previous bak
 			TCHAR txtFileNameBAK[MAX_PATH];
-			wsprintf(txtFileNameBAK, L"%s.bak", txtFileName);
+			wsprintf(txtFileNameBAK, L"%s%s.bak",APP_CFG_AP_FOLDER_ROOT, txtFileName);
 			DeleteFile(txtFileNameBAK);
 			//rename old file to .BAK
 			MoveFile(txtFileName, txtFileNameBAK);
@@ -205,7 +206,7 @@ TCHAR* logDateTime(){
 	res = GetDateFormat(  LOCALE_SYSTEM_DEFAULT,
 						  NULL,
 						  NULL,
-						  L"dd.MM.yyyy",
+						  L"yyyy.MM.dd",
 						  lpDateStr,
 						  sizeof (lpDateStr) * sizeof(TCHAR));
 	if (res == 0)
@@ -213,6 +214,7 @@ TCHAR* logDateTime(){
 		wcscpy(lpDateStr, L"err");
 	}
 
+	//wsprintf(str, L"Date and Time: %s %s", lpDateStr, lpTimeStr);
 	wsprintf(str, L"%s %s", lpDateStr, lpTimeStr);
 	return str;
 }
@@ -262,10 +264,81 @@ static int writefile(TCHAR *filetext){
 
 	return 0;
 }
+static int writefile(const char	*logName, TCHAR *filetext){
+
+//	EnterCriticalSection(pCriticalAction);
+
+	/* File Write Function, written by professor chemicalX */
+	FILE	*fp;						/* Declare FILE structure */
+	TCHAR  szTemp[255];
+	char  szTempA[255];
+
+	wsprintf(szTemp, L"%s", filetext);
+	wcstombs(szTempA, szTemp, sizeof(szTemp)/sizeof(TCHAR));
+
+// 	if (bFirstFileCall){
+// 		// Get name of executable
+// 		initFileNames();
+// 	}
+
+	fp = fopen(logName, "a+");
+
+	/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+	/* First of we open the file supplied by the filename paremeter */
+
+	/*
+	 * in the "a+" mode for appending, so if it doesnt exist its created. £
+	 * fp = fopen(filename,"w"); // Open using the "w" mode for writing.
+	 */
+	long	fsize = strlen(szTempA);	/* Declare the long fsize with the length of the filetext */
+	/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+
+	/* paremeter witch stores the text or data to right to the file. */
+	fwrite(szTempA, 1, fsize, fp);		/* Write File */
+	fflush(fp);
+	fclose(fp); /* Remember to close the file stream after calling file functions, */
+
+	/* otherwise the file wont be created. */
+
+//	LeaveCriticalSection(pCriticalAction);
+
+	return 0;
+}
 //========================== end of file stuff =============================
 
 // format input, convert to 8-bit and send.
-void nclog (const wchar_t *fmt, ...)
+void nclog ( const wchar_t *fmt, ...)
+{
+	va_list vl;
+	va_start(vl,fmt);
+	wchar_t bufW[1024]; // to bad CE hasn't got wvnsprintf
+	wvsprintf(bufW,fmt,vl);
+#ifdef USEWINSOCK
+	wsa_init();
+#endif
+	char bufOutA[512];
+	//add instance number
+	HMODULE hMod = GetModuleHandle(NULL);
+	WCHAR bufTmpW[512];
+	wsprintf(bufTmpW, L"%s 0x%08x: %s",logDateTime(), hMod, bufW);
+	wsprintf(bufW, L"%s\n", bufTmpW);
+	//convert to char
+	WideCharToMultiByte(CP_ACP,0,bufW,-1,bufOutA,400, NULL, NULL);
+#ifdef USEWINSOCK
+	wsa_send(bufOutA);
+#endif
+
+	writefile(bufW);
+
+#ifdef DEBUG
+	DEBUGMSG(1, (bufW));
+#else
+	RETAILMSG(1, (bufW));
+#endif
+}
+
+// format input, convert to 8-bit and send.
+void nclog (const char	*logFileName, const wchar_t *fmt, ...)
 {
         va_list vl;
         va_start(vl,fmt);
@@ -278,15 +351,15 @@ void nclog (const wchar_t *fmt, ...)
 		//add instance number
 		HMODULE hMod = GetModuleHandle(NULL);
 		WCHAR bufTmpW[512];
-		wsprintf(bufTmpW, L"0x%08x: %s", hMod, bufW);
-		wsprintf(bufW, L"%s", bufTmpW);
+		wsprintf(bufTmpW, L"%s 0x%08x: %s",logDateTime(), hMod, bufW);
+		wsprintf(bufW, L"%s\n", bufTmpW);
 		//convert to char
         WideCharToMultiByte(CP_ACP,0,bufW,-1,bufOutA,400, NULL, NULL);
 #ifdef USEWINSOCK
 		wsa_send(bufOutA);
 #endif
 
-			writefile(bufW);
+			writefile(logFileName, bufW);
 
 #ifdef DEBUG
 		DEBUGMSG(1, (bufW));
@@ -295,6 +368,36 @@ void nclog (const wchar_t *fmt, ...)
 #endif
 }
 
+// format input, convert to 8-bit and send.
+void nclog (const char	*logFileName,const wchar_t	*tag, const wchar_t *fmt, ...)
+{
+	va_list vl;
+	va_start(vl,fmt);
+	wchar_t bufW[1024]; // to bad CE hasn't got wvnsprintf
+	wvsprintf(bufW,fmt,vl);
+#ifdef USEWINSOCK
+	wsa_init();
+#endif
+	char bufOutA[512];
+	//add instance number
+	HMODULE hMod = GetModuleHandle(NULL);
+	WCHAR bufTmpW[512];
+	wsprintf(bufTmpW, L"%s 0x%08x:%s %s",logDateTime(), hMod,tag, bufW);
+	wsprintf(bufW, L"%s\n", bufTmpW);
+	//convert to char
+	WideCharToMultiByte(CP_ACP,0,bufW,-1,bufOutA,400, NULL, NULL);
+#ifdef USEWINSOCK
+	wsa_send(bufOutA);
+#endif
+
+	writefile(logFileName, bufW);
+
+#ifdef DEBUG
+	DEBUGMSG(1, (bufW));
+#else
+	RETAILMSG(1, (bufW));
+#endif
+}
 // finalize the socket on program termination.
 struct _nclog_module
 {

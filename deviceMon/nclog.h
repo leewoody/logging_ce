@@ -5,6 +5,8 @@
 
 extern BOOL nclog_LogginEnabled;
 extern void nclog (const wchar_t *fmt, ...);
+extern void nclog (const char	*logFileName,const wchar_t *fmt, ...);
+extern void nclog (const char	*logFileName,const wchar_t	*tag,const wchar_t *fmt, ...);
 //extern bool set_nclog_port(unsigned short x) { return wsa_bind(x); }
 extern TCHAR* logDateTime();
 
